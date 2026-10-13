@@ -1,0 +1,13 @@
+{
+  "name": "archimap-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Хранит правки админа и предложения посетителей в data/edits.json",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env index.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}

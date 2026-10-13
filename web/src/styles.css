@@ -1,0 +1,2384 @@
+/* Оформление в духе iOS 8, тёмный вариант — каким он был в Control Center,
+   Podcasts и Videos: плоские цвета, волосяные линии, размытые
+   полупрозрачные панели и системная палитра 2014 года на Helvetica Neue.
+   Теней и градиентов нет: глубина в iOS 7–8 передаётся слоями
+   и полупрозрачностью, а не объёмом. */
+
+:root {
+  /* системные цвета iOS 8 */
+  --tint: #007aff; /* заливки: белый текст на синем читается и так */
+  --tint-text: #4da2ff; /* тот же синий, осветлённый для текста на тёмном */
+  --green: #4cd964;
+  --red: #ff3b30;
+  --purple: #9b99f0; /* #5856d6 на тёмном фоне почти не виден */
+  --orange: #ff9500;
+
+  --grouped: #131315; /* фон сгруппированной таблицы */
+  --cell: #1e1e20;
+  --separator: #37373a;
+  --bar: rgba(26, 26, 28, 0.92);
+  --bar-line: #3a3a3d;
+  --text: #ffffff;
+  --secondary: #8e8e93;
+  --header: #8e8e93; /* заголовок секции */
+  --pressed: #2a2a2d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--grouped);
+  color: var(--text);
+  /* «Helvetica Neue» в стеке намеренно нет: см. комментарий в index.html */
+  font: 15px/1.4 Arimo, -apple-system, Arial, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select {
+  font-family: inherit;
+}
+
+/* --- строка навигации ------------------------------------------------ */
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 44px;
+  background: var(--bar);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--bar-line);
+}
+
+.navbar__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+}
+
+.navbar__home {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* как в iOS: кнопки по краям панели, заголовок строго по центру */
+.navbar__inner {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.navbar__side {
+  display: flex;
+  min-width: 0;
+}
+
+.navbar__side--right {
+  justify-content: flex-end;
+}
+
+.navbar__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  background: none;
+  border: none;
+  color: var(--tint-text);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.navbar__button:disabled {
+  color: var(--secondary);
+  cursor: default;
+}
+
+.navbar__plus {
+  font-size: 19px;
+  line-height: 1;
+}
+
+.badge {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 9px;
+  background: var(--red);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.app {
+  padding: 0 0 60px;
+}
+
+/* содержимое ограничено по ширине, а бары тянутся во всю ширину окна */
+.navbar__inner,
+.toolbar__inner,
+.section-note,
+.grid,
+.map-wrap,
+.state {
+  max-width: 1180px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* заголовок секции сгруппированной таблицы.
+   margin-top/bottom задаём отдельно: сокращённый `margin` сбросил бы
+   auto-поля из правила выше, и заголовок уехал бы к краю окна */
+.section-note {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding: 18px 16px 7px;
+  font-size: 13px;
+  color: var(--header);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+
+/* --- панель управления ----------------------------------------------- */
+
+.toolbar {
+  position: sticky;
+  top: 44px;
+  z-index: 20;
+  background: var(--bar);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--separator);
+  padding: 8px 0 10px;
+}
+
+.toolbar__inner {
+  padding: 0 16px;
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* сегментированный контрол: рамка тинта, активный сегмент залит */
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--tint-text);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.segmented button {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 14px;
+  border: none;
+  border-left: 1px solid var(--tint-text);
+  background: transparent;
+  color: var(--tint-text);
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.segmented button:first-child {
+  border-left: none;
+}
+
+.segmented button:hover:not(:disabled):not(.segmented__on) {
+  background: rgba(0, 122, 255, 0.22);
+}
+
+/* два класса, чтобы перебить `.segmented button` с его прозрачным фоном */
+.segmented .segmented__on {
+  background: var(--tint);
+  color: #fff;
+}
+
+.segmented button:disabled {
+  color: var(--secondary);
+  cursor: default;
+}
+
+/* Вкладки — переход между разными наборами постов (Россия, Другие страны,
+   вкладки модерации), переключатель (.segmented) — выбор значения (Список
+   или Карта). Раньше вкладки рисовались переключателем; справочник Бирмана
+   их различает (13.10): у вкладок — подчёркнутая выбранная, без рамки */
+.tabbar {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 4px 18px;
+}
+
+.tabbar button {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 0 4px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--tint-text);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tabbar button:hover:not(.tabbar__on) {
+  border-bottom-color: rgba(0, 122, 255, 0.4);
+}
+
+.tabbar .tabbar__on {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--tint);
+  cursor: default;
+}
+
+/* что во вкладке — словами под ней, а не во всплывающей подсказке */
+.tabs__hint {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--secondary);
+}
+
+.tab__count {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.views {
+  margin-left: auto;
+}
+
+.filters {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+/* поле поиска iOS: серое скруглённое поле с лупой */
+.searchbar {
+  flex: 1;
+  min-width: 200px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchbar__icon {
+  position: absolute;
+  left: 9px;
+  color: var(--secondary);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.search {
+  width: 100%;
+  padding: 7px 10px 7px 28px;
+  border: none;
+  border-radius: 10px;
+  background: #2c2c2e;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.search::placeholder {
+  color: var(--secondary);
+}
+
+.search:focus {
+  outline: none;
+  background: #37373a;
+  box-shadow: 0 0 0 1px var(--tint-text);
+}
+
+.select {
+  padding: 6px 10px;
+  border: 1px solid var(--separator);
+  border-radius: 6px;
+  background: var(--cell);
+  color: var(--tint-text);
+  font-size: 14px;
+}
+
+.counter {
+  color: var(--secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- плитки постов ---------------------------------------------------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 12px;
+  padding: 0 16px;
+}
+
+.card {
+  background: var(--cell);
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+
+/* отмеченный админом пост — оранжевая полоса слева */
+/* пост без фотографий — одним текстом, строк больше */
+.card--text .card__body {
+  border-top: none;
+}
+
+.card--text .card__text {
+  -webkit-line-clamp: 8;
+}
+
+/* тег места ведёт к постам этого места */
+.chip--link {
+  border: none;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.chip--link:hover {
+  filter: brightness(1.25);
+}
+
+.field-error {
+  margin: 6px 0 0;
+  color: var(--red);
+  font-size: 13px;
+}
+
+/* стопка плашек внизу по центру: новая — снизу */
+.toasts {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: min(560px, calc(100vw - 24px));
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: min(560px, calc(100vw - 24px));
+  padding: 10px 12px 10px 16px;
+  background: #2c2c2e;
+  border: 1px solid var(--bar-line);
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  font-size: 14px;
+  animation: sheet-up 0.18s ease-out;
+}
+
+.toast__text {
+  flex: 1;
+}
+
+.toast__undo {
+  background: none;
+  border: none;
+  color: var(--tint-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  white-space: nowrap;
+}
+
+.toast__close {
+  background: none;
+  border: none;
+  color: var(--secondary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.credits__admin {
+  margin: 10px 0 0;
+}
+
+.credits__link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--secondary);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.card__ad {
+  color: var(--orange);
+  font-size: 14px;
+  padding: 4px 0;
+}
+
+.card--flagged {
+  box-shadow: inset 3px 0 0 var(--orange);
+}
+
+.card:active {
+  background: var(--pressed);
+}
+
+.card__photo {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  background: #2c2c2e;
+  display: block;
+}
+
+.card__photo--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--secondary);
+  font-size: 13px;
+}
+
+.card__body {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1;
+  border-top: 1px solid var(--separator);
+}
+
+.card__meta {
+  display: flex;
+  gap: 12px;
+  color: var(--secondary);
+  font-size: 12px;
+}
+
+.card__text {
+  margin: 0;
+  font-size: 14px;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* токены-метки, как адресаты в Mail */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: auto;
+}
+
+.chip {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.chip--manual,
+.chip--ru {
+  background: rgba(76, 217, 100, 0.18);
+  color: var(--green);
+}
+
+.chip--foreign {
+  background: rgba(0, 122, 255, 0.22);
+  color: var(--tint-text);
+}
+
+.chip--street {
+  background: rgba(155, 153, 240, 0.2);
+  color: var(--purple);
+}
+
+/* тема «еда» — не место: свой цвет, чтобы не путать с городами */
+.chip--food {
+  background: rgba(255, 149, 0, 0.2);
+  color: var(--orange);
+}
+
+/* связанное место — не место поста: приглушённо, без цвета вкладки */
+.chip--related {
+  background: rgba(142, 142, 147, 0.2);
+  color: #aeaeb2;
+  white-space: normal;
+}
+
+/* Тег, на который нельзя нажать (улица у посетителя, связанное место), —
+   без плашки, одним цветным текстом: раньше он выглядел так же, как
+   нажимаемый тег места, а не нажимался (справочник Бирмана:
+   «Консистентность», 13.10) */
+.chip--static {
+  background: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* --- модальное окно поста --------------------------------------------- */
+
+/* окно открыто — лента под ним стоит (App.jsx, modalOpen); место под
+   полосу прокрутки остаётся, чтобы страница не прыгала вбок */
+html {
+  scrollbar-gutter: stable;
+}
+
+html.scroll-locked {
+  overflow: hidden;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  overscroll-behavior: contain;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 40;
+}
+
+/* лист выезжает снизу, как модальные экраны iOS */
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+
+.modal {
+  position: relative;
+  background: var(--grouped);
+  border-radius: 8px;
+  max-width: 1040px;
+  width: 100%;
+  max-height: 88vh;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  grid-template-rows: 44px 1fr;
+  animation: sheet-up 0.22s ease-out;
+}
+
+.modal--text {
+  grid-template-columns: 1fr;
+  max-width: 620px;
+}
+
+.modal__bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  background: var(--bar);
+  border-bottom: 1px solid var(--bar-line);
+}
+
+.modal__bar h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.modal__done,
+.modal__cancel {
+  background: none;
+  border: none;
+  color: var(--tint-text);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.modal__cancel {
+  font-weight: 400;
+  min-width: 60px;
+  text-align: left;
+}
+
+.modal__done:disabled {
+  color: var(--secondary);
+  cursor: default;
+}
+
+.modal__spacer {
+  width: 60px;
+}
+
+.modal__photos {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  background: #0b0b0c;
+}
+
+.modal__photos img {
+  width: 100%;
+  border-radius: 6px;
+}
+
+.modal__side {
+  padding: 0 0 16px;
+  overflow-y: auto;
+}
+
+.modal__text {
+  margin: 0;
+  padding: 12px 16px;
+  background: var(--cell);
+  border-top: 1px solid var(--separator);
+  border-bottom: 1px solid var(--separator);
+  white-space: pre-wrap;
+  font-size: 15px;
+}
+
+.modal__side h4,
+.sheet__body h4 {
+  margin: 0;
+  padding: 18px 16px 7px;
+  font-size: 13px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+  color: var(--header);
+}
+
+/* строки сгруппированной таблицы */
+.places {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--cell);
+  border-top: 1px solid var(--separator);
+  border-bottom: 1px solid var(--separator);
+}
+
+.places li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.places li:last-child {
+  border-bottom: none;
+}
+
+.places code {
+  color: var(--secondary);
+  font-size: 13px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+/* координаты — кнопка: раскрывает миникарту с точкой; открытая подсвечена */
+.coords-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--tint-text);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.coords-link[aria-pressed='true'] {
+  text-decoration: underline;
+}
+
+/* миникарта под строкой места — на всю ширину строки */
+.places li {
+  flex-wrap: wrap;
+}
+
+.places__map {
+  flex-basis: 100%;
+  padding: 4px 0 6px;
+}
+
+.street-check p {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--secondary);
+}
+
+.street-check--error {
+  color: var(--red);
+}
+
+.street-check__usage {
+  color: var(--header);
+}
+
+.chip--street.chip--link[aria-pressed='true'] {
+  outline: 1px solid var(--purple);
+}
+
+.modal__section {
+  padding: 10px 16px;
+  background: var(--cell);
+  border-top: 1px solid var(--separator);
+  border-bottom: 1px solid var(--separator);
+}
+
+.modal__link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  margin-top: 18px;
+  padding: 0 16px;
+  background: var(--cell);
+  border-top: 1px solid var(--separator);
+  border-bottom: 1px solid var(--separator);
+  color: var(--tint-text);
+  text-decoration: none;
+  font-size: 15px;
+}
+
+.modal__link::after {
+  content: '›';
+  color: #55555a;
+  font-size: 20px;
+}
+
+.state {
+  color: var(--secondary);
+  padding: 20px 16px;
+}
+
+.state--error {
+  color: var(--red);
+}
+
+.sentinel {
+  height: 40px;
+}
+
+.more {
+  margin: 16px 0 0;
+  text-align: center;
+}
+
+/* вход для админа в шапке — только на телефоне в режиме карты, где
+   подвала нет (см. .app--map) */
+.navbar__login {
+  display: none;
+}
+
+/* --- карта ------------------------------------------------------------ */
+
+.map-wrap {
+  display: grid;
+  grid-template-columns: 1fr 330px;
+  gap: 12px;
+  padding: 12px 16px 0;
+  height: calc(100vh - 190px);
+  min-height: 440px;
+}
+
+.map-box {
+  position: relative;
+  min-height: 0;
+}
+
+.map {
+  height: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--separator);
+}
+
+/* переключатель подложки поверх карты */
+.map-styles {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  background: var(--bar);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+.map-styles button {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* что с подложкой: грузится основная или показана запасная (mapStyle.js) */
+.map-status {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 2;
+  max-width: calc(100% - 20px);
+  margin: 0;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: var(--bar);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  color: var(--secondary);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.map-status--center {
+  left: 50%;
+  top: 50%;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  max-width: min(360px, calc(100% - 20px));
+  color: var(--text);
+  font-size: 14px;
+  text-align: center;
+}
+
+.map-panel {
+  background: var(--cell);
+  border: 1px solid var(--separator);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.map-panel__hint {
+  color: var(--secondary);
+  font-size: 14px;
+  margin: 0;
+  padding: 14px 16px;
+}
+
+.map-stats {
+  padding: 0 16px 14px;
+  font-size: 14px;
+  color: var(--secondary);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.map-stats h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.map-stats table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.map-stats th,
+.map-stats td {
+  padding: 3px 0;
+  border-top: 1px solid var(--separator);
+  font-weight: normal;
+  vertical-align: top;
+}
+
+.map-stats th {
+  text-align: left;
+  color: var(--text);
+}
+
+.map-stats td {
+  text-align: right;
+  white-space: nowrap;
+  padding-left: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.map-stats__sub th {
+  padding-left: 14px;
+  color: var(--secondary);
+}
+
+.map-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  /* не height: «набережная реки Фонтанки · Санкт-Петербург» — три строки,
+     в 44 px они вылезали за верх панели */
+  min-height: 44px;
+  padding: 8px 10px 8px 16px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  background: var(--bar);
+  border-bottom: 1px solid var(--bar-line);
+}
+
+.map-panel__head h3 {
+  margin: 0;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.map-panel__head button {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--tint-text);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.map-panel__meta {
+  margin: 0;
+  padding: 10px 16px 6px;
+  color: var(--header);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+
+/* откуда точка: вручную — зелёным, как теги ручных точек; модель — фиолетовым */
+.map-panel__source {
+  margin: 0;
+  padding: 0 16px 10px;
+  font-size: 13px;
+  color: var(--green);
+}
+
+.map-panel__source--model {
+  color: var(--purple);
+}
+
+.map-panel__list {
+  overflow-y: auto;
+  border-top: 1px solid var(--separator);
+}
+
+/* строка таблицы со шевроном справа */
+.mini {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  background: var(--cell);
+  border: none;
+  border-bottom: 1px solid var(--separator);
+  padding: 8px 12px 8px 16px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.mini:active {
+  background: var(--pressed);
+}
+
+.mini img {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+  background: #2c2c2e;
+}
+
+.mini em {
+  display: block;
+  color: var(--secondary);
+  font-style: normal;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.mini span {
+  flex: 1;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.mini::after {
+  content: '›';
+  color: #55555a;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.maplibregl-ctrl-attrib {
+  font-size: 10px;
+}
+
+@media (max-width: 900px) {
+  .map-wrap {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .map-box {
+    height: 60vh;
+  }
+  .map-panel {
+    max-height: 60vh;
+  }
+  .modal {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- правки админа и предложения посетителей --- */
+
+/* кнопка-строка в стиле iOS: только текст цвета тинта, без рамки */
+.row-action {
+  background: none;
+  border: none;
+  color: var(--tint-text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.row-action:disabled {
+  color: var(--secondary);
+  cursor: default;
+}
+
+.row-action--danger {
+  color: var(--red);
+}
+
+.section-note--row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-note--row .row-action {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* крестик внутри тега — появляется только в режиме админа */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* крестик покрупнее: по 14-пиксельному значку легко промахнуться */
+.chip__x {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.6;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+  margin: -2px -5px -2px 0;
+  cursor: pointer;
+}
+
+.chip__x:hover {
+  opacity: 1;
+}
+
+.places__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.suggest {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.suggest__input {
+  width: 100%;
+  background: #2c2c2e;
+  border: none;
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.suggest__input:focus {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--tint-text);
+}
+
+.suggest__done {
+  margin: 0;
+  color: var(--green);
+  font-size: 14px;
+}
+
+.card__src {
+  margin-left: auto;
+  color: var(--secondary);
+}
+
+/* шапка карточки: строка одна, длинное название канала обрезается,
+   символ ♥ берётся из системного шрифта — в Arimo его нет */
+.card__meta {
+  align-items: baseline;
+  font-family: Arimo, 'Segoe UI Symbol', 'Segoe UI', sans-serif;
+  white-space: nowrap;
+}
+
+.card__src {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+
+/* --- системное окно входа --- */
+
+.alert {
+  width: 280px;
+  background: #2a2a2d;
+  border-radius: 14px;
+  overflow: hidden;
+  text-align: center;
+  animation: sheet-up 0.18s ease-out;
+}
+
+.alert__body {
+  padding: 18px 16px 14px;
+}
+
+.alert__body h3 {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.alert__body p {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--secondary);
+}
+
+.alert__input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--separator);
+  border-radius: 6px;
+  background: #1a1a1c;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  text-align: center;
+}
+
+.alert__input:focus {
+  outline: none;
+  border-color: var(--tint-text);
+}
+
+.alert__check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--secondary);
+  cursor: pointer;
+}
+
+.alert__check input {
+  margin: 0;
+  accent-color: var(--tint);
+}
+
+.alert__error {
+  margin: 10px 0 0;
+  color: var(--red);
+  font-size: 13px;
+}
+
+.alert__actions {
+  display: flex;
+  border-top: 1px solid #3f3f43;
+}
+
+.alert__actions button {
+  flex: 1;
+  padding: 11px 0;
+  background: none;
+  border: none;
+  border-left: 1px solid #3f3f43;
+  color: var(--tint-text);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.alert__actions button:first-child {
+  border-left: none;
+}
+
+.alert__actions button:disabled {
+  color: var(--secondary);
+  cursor: default;
+}
+
+.alert__primary {
+  font-weight: 600;
+}
+
+.counter--warn {
+  color: var(--orange);
+}
+
+/* --- источники данных --- */
+
+.credits {
+  max-width: 1180px;
+  margin: 28px auto 0;
+  padding: 14px 16px 0;
+  border-top: 1px solid var(--separator);
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.credits a {
+  color: var(--secondary);
+}
+
+/* --- баг-репорт --- */
+
+/* кнопки админа в карточке: в ряд с промежутком (без него слипались в
+   «Добавить в баг-репортОтметить») и с обводкой, как в модерации */
+.card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid var(--separator);
+  margin: 4px -12px -12px;
+  padding: 8px 12px 10px;
+}
+
+.card__actions .row-action {
+  padding: 3px 9px;
+  border: 1px solid rgba(77, 162, 255, 0.45);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.card__actions .row-action--danger {
+  border-color: rgba(255, 59, 48, 0.5);
+}
+
+.card__actions .row-action:hover {
+  background: rgba(77, 162, 255, 0.1);
+}
+
+.card__actions .row-action--on {
+  border-color: rgba(255, 149, 0, 0.6);
+}
+
+.row-action--on {
+  color: var(--orange);
+}
+
+.modal__section--rows {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+/* --- поля ввода --- */
+
+.field {
+  width: 100%;
+  min-width: 0;
+  background: #2c2c2e;
+  border: none;
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+}
+
+.field::placeholder,
+.suggest__input::placeholder {
+  color: var(--secondary);
+}
+
+.field:focus {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--tint-text);
+}
+
+.field--bad,
+.field--bad:focus {
+  box-shadow: 0 0 0 1px var(--red);
+}
+
+.suggest__point {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- выбор точки на карте --- */
+
+.picker {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.picker__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.picker__row .row-action {
+  white-space: nowrap;
+}
+
+.picker__map {
+  height: 240px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--separator);
+}
+
+/* по карте здесь не листают, а ставят точку */
+.picker__map .maplibregl-canvas {
+  cursor: crosshair;
+}
+
+.picker__hint {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 12px;
+}
+
+.picker__hint--bad {
+  color: var(--red);
+}
+
+/* «Найти место» у админа: находки — кнопки, нажал — точка там */
+.place-search {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.place-search__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--separator);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.place-search__list li + li {
+  border-top: 1px solid var(--separator);
+}
+
+.place-search__item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.place-search__item:hover {
+  background: rgba(77, 162, 255, 0.1);
+}
+
+.place-search__name {
+  color: var(--tint-text);
+  font-size: 14px;
+}
+
+.place-search__meta {
+  color: var(--secondary);
+  font-size: 12px;
+}
+
+/* --- листы: новый пост и модерация --- */
+
+.sheet {
+  width: 100%;
+  max-width: 560px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--grouped);
+  border-radius: 8px;
+  overflow: hidden;
+  animation: sheet-up 0.22s ease-out;
+}
+
+.sheet--wide {
+  max-width: 860px;
+}
+
+.sheet .modal__bar {
+  flex-shrink: 0;
+  height: 44px;
+  gap: 10px;
+}
+
+.sheet__body {
+  overflow-y: auto;
+  /* длинное слово или ссылка не должны уводить окно вбок */
+  overflow-x: hidden;
+  padding-bottom: 18px;
+  overscroll-behavior: contain;
+}
+
+.sheet__tabs {
+  flex-shrink: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--separator);
+}
+
+/* все вкладки модерации видны сразу, без прокрутки: ряд на всю ширину окна,
+   сегменты плотнее; не влезают — переносятся (ниже, @media 900px) */
+
+.sheet__done {
+  margin: 0;
+  padding: 28px 16px;
+  font-size: 15px;
+  text-align: center;
+}
+
+.sheet__error {
+  margin: 0;
+  padding: 12px 16px 0;
+  color: var(--red);
+  font-size: 14px;
+}
+
+.sheet__note {
+  margin: 0;
+  padding: 10px 16px 0;
+  color: var(--secondary);
+  font-size: 13px;
+}
+
+/* ловушка для ботов: в вёрстке есть, человеку не видна */
+.trap {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.thumbs__item {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #2c2c2e;
+  flex-shrink: 0;
+}
+
+.thumbs__item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumbs__x {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 15px;
+  line-height: 22px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.thumbs__add {
+  width: 76px;
+  height: 76px;
+  border: 1px dashed var(--tint-text);
+  border-radius: 6px;
+  background: none;
+  color: var(--tint-text);
+  font-size: 26px;
+  cursor: pointer;
+}
+
+.thumbs__add:disabled {
+  color: var(--secondary);
+  border-color: var(--separator);
+}
+
+/* запись в очереди модерации */
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px 16px;
+  background: var(--cell);
+  border-top: 1px solid var(--separator);
+  border-bottom: 1px solid var(--separator);
+}
+
+/* шапка переносится: на телефоне подпись «Claude Haiku 4.5, точку уточнил
+   Claude Opus» не влезала в строку и распирала карточку шире экрана (30.09) */
+.review__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 14px;
+}
+
+.review__head span {
+  color: var(--secondary);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.review__text {
+  margin: 0;
+  font-size: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.review__meta {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 13px;
+}
+
+.review__meta a {
+  color: var(--tint-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.review__applied {
+  color: var(--green);
+  font-size: 14px;
+  padding: 4px 0;
+}
+
+.review__manual {
+  margin: 0;
+  color: var(--green);
+  font-size: 14px;
+}
+
+.review__manual a {
+  color: var(--tint-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* пост внутри карточки модерации */
+.preview {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.preview__photo {
+  width: 120px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: #2c2c2e;
+}
+
+.preview__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preview__meta {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 12px;
+}
+
+/* текст поста целиком: по нему проверяют, верно ли определено место */
+.preview__text {
+  margin: 0;
+  font-size: 14px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* ответ модели или посетителя — отдельной плашкой под постом */
+.review__text--answer {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #2c2c2e;
+}
+
+@media (max-width: 640px) {
+  .preview__photo {
+    width: 88px;
+    height: 70px;
+  }
+}
+
+.review__rework {
+  margin: 0;
+  color: var(--orange);
+  font-size: 13px;
+}
+
+.review__actions {
+  flex-wrap: wrap;
+  display: flex;
+  gap: 20px;
+}
+
+/* --- телефоны ----------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  /* iOS увеличивает страницу, если у поля шрифт мельче 16px */
+  .search,
+  .select,
+  .field,
+  .suggest__input,
+  .alert__input {
+    font-size: 16px;
+  }
+
+  .navbar__inner {
+    padding: 0 8px;
+  }
+
+  /* высокая панель фильтров на телефоне съела бы полэкрана — пусть
+     уезжает вместе со списком, а прилипает только строка навигации */
+  .toolbar {
+    position: static;
+    padding: 8px 0;
+  }
+
+  .toolbar__inner {
+    padding: 0 12px;
+  }
+
+  /* вкладки переносятся на вторую строку, а не уезжают лентой вбок: все
+     видны сразу (bureau.ru/soviet/20211109) */
+  .tabs {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .segmented {
+    flex-shrink: 0;
+  }
+
+  .segmented button {
+    padding: 5px 11px;
+  }
+
+  /* «Админ/Посетитель» нужен редко — в конец ряда, чтобы «Список/Карта»
+     был виден без прокрутки */
+  .views {
+    margin-left: 0;
+    order: 2;
+  }
+
+  .filters {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .searchbar {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  /* по два в ряд: втроём в одну строку названия не помещаются */
+  .select {
+    flex: 1 1 40%;
+    min-width: 0;
+    padding: 6px 8px;
+  }
+
+  .counter {
+    flex: 1 1 100%;
+    font-size: 12px;
+  }
+
+  .section-note {
+    padding: 16px 12px 7px;
+  }
+
+  .grid {
+    padding: 0 12px;
+    gap: 10px;
+  }
+
+  .card__photo {
+    height: 200px;
+  }
+
+  .credits {
+    padding: 14px 12px 0;
+  }
+
+  /* Карта на телефоне — на весь экран под панелями. Страница при этом не
+     прокручивается: иначе палец, двигающий карту, не мог бы вернуть
+     страницу обратно к фильтрам. */
+  .app--map {
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  /* width обязателен: auto-поля из общего правила во flex-колонке
+     сжимают блок до ширины содержимого, и карта получается нулевой */
+  .app--map .map-wrap {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    display: block;
+    position: relative;
+    height: auto;
+    padding: 0;
+  }
+
+  .app--map .map-box {
+    height: 100%;
+  }
+
+  .app--map .map {
+    border: none;
+    border-radius: 0;
+  }
+
+  .app--map .credits {
+    display: none;
+  }
+
+  .app--map .navbar__login {
+    display: inline-flex;
+    color: var(--secondary);
+    font-size: 14px;
+  }
+
+  /* список постов места выезжает снизу поверх карты, как лист в iOS */
+  .app--map .map-panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 5;
+    max-height: 58%;
+    border: none;
+    border-top: 1px solid var(--bar-line);
+    border-radius: 12px 12px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: sheet-up 0.2s ease-out;
+  }
+
+  .app--map .map-wrap:not(.map-wrap--open) .map-panel {
+    display: none;
+  }
+
+  .map-styles {
+    top: 8px;
+    left: 8px;
+  }
+
+  /* окна — на весь экран, прокручиваются целиком */
+  .overlay {
+    padding: 0;
+  }
+
+  .modal,
+  .sheet {
+    max-width: none;
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  .modal {
+    display: block;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .modal__bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    height: 44px;
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+  }
+
+  /* фотографии листаются вбок, по одной на экран */
+  .modal__photos {
+    flex-direction: row;
+    gap: 0;
+    padding: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+  }
+
+  .modal__photos img {
+    flex: 0 0 100%;
+    width: 100%;
+    max-height: 65vh;
+    object-fit: contain;
+    border-radius: 0;
+    scroll-snap-align: center;
+  }
+
+  .modal__side {
+    overflow: visible;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+
+  .sheet__body {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+
+  .picker__map {
+    height: 260px;
+  }
+}
+
+@media (max-width: 420px) {
+  .navbar__label {
+    display: none;
+  }
+
+  .navbar__title {
+    font-size: 16px;
+  }
+}
+
+/* координаты в модерации: нажатие раскрывает миникарту под строкой */
+.coords-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--tint-text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.coords-map {
+  display: block;
+  margin-top: 8px;
+}
+
+/* на миникарте только смотрят — обычный курсор, не прицел */
+.coords-map .maplibregl-canvas {
+  cursor: grab;
+}
+
+/* превью поста в модерации открывает фото во весь экран */
+.preview__open,
+button.thumbs__item {
+  position: relative;
+  padding: 0;
+  border: none;
+  background: none;
+  flex-shrink: 0;
+  cursor: zoom-in;
+}
+
+.preview__open .preview__photo {
+  display: block;
+}
+
+.preview__count {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 11px;
+}
+
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.92);
+  cursor: zoom-out;
+}
+
+.viewer__photo {
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 96px);
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.viewer__close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  padding: 6px 4px;
+  border: none;
+  background: none;
+  color: var(--tint-text);
+  font: inherit;
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.viewer__nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 64px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 36px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.viewer__nav--prev {
+  left: 12px;
+}
+
+.viewer__nav--next {
+  right: 12px;
+}
+
+.viewer__count {
+  position: absolute;
+  bottom: 16px;
+  color: var(--secondary);
+  font-size: 13px;
+}
+
+.point-map {
+  display: block;
+}
+
+/* модель считает пост рекламой — решает админ («Скрыть пост») */
+.review__ad {
+  margin: 0;
+  color: var(--orange);
+  font-size: 13px;
+}
+
+/* модель назвала объект, геокодер не нашёл — точка на городе */
+.review__miss {
+  margin: 0;
+  color: var(--orange);
+  font-size: 13px;
+}
+
+.review__miss a {
+  color: var(--tint-text);
+}
+
+/* посты внутри отчёта — карточками, как в «От модели»; рамкой, чтобы
+   отделялись от самого отчёта (он тоже карточка) */
+.report__cards .review {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--grouped);
+  border: 1px solid var(--separator);
+  border-radius: 8px;
+}
+
+/* почему пост в списке отчёта: «Искатель не нашёл «…»: адрес не назван» */
+.review__report {
+  margin: 0;
+  color: var(--orange);
+  font-size: 13px;
+}
+
+/* несколько ручных точек: строка на точку, выбранная правится на карте */
+.points {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.points__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.points__row .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.points__num {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: 1px solid var(--secondary);
+  border-radius: 50%;
+  background: none;
+  color: var(--secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.points__row--on .points__num {
+  border-color: var(--orange);
+  background: var(--orange);
+  color: #fff;
+}
+
+.points__related {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.points__related input {
+  margin: 0;
+  accent-color: var(--tint);
+}
+
+.points__coords {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--tint-text);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .points__row {
+    flex-wrap: wrap;
+  }
+}
+
+/* модель, разбиравшая пост, — в шапке карточки «От модели» */
+.review__date {
+  white-space: nowrap;
+}
+
+.review__model {
+  /* цельной плашкой: при переносе фон не рвётся посреди строки */
+  display: inline-block;
+  max-width: 100%;
+  margin-right: 10px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: #2c2c2e;
+  color: var(--purple);
+  font-size: 12px;
+}
+
+/* кнопки действий в карточке модерации — с тонкой обводкой, чтобы не
+   путались со ссылками; кнопка, чья форма открыта, подсвечена */
+.review__actions .row-action {
+  padding: 4px 10px;
+  border: 1px solid rgba(77, 162, 255, 0.45);
+  border-radius: 6px;
+}
+
+.review__actions .row-action--danger {
+  border-color: rgba(255, 59, 48, 0.5);
+}
+
+.review__actions .row-action:hover:not(:disabled) {
+  background: rgba(77, 162, 255, 0.1);
+}
+
+.row-action--toggle[aria-pressed='true'] {
+  background: rgba(0, 122, 255, 0.28);
+  border-color: var(--tint-text);
+  color: #fff;
+}
+
+/* отправка из формы — залитая: её не спутать с кнопкой, открывшей форму */
+.row-action--primary,
+.review__actions .row-action--primary {
+  padding: 5px 12px;
+  border: 1px solid var(--tint);
+  border-radius: 6px;
+  background: var(--tint);
+  color: #fff;
+}
+
+.row-action--primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+/* выбор карты для точки: наша (OpenStreetMap) или Яндекс — у админа */
+.picker__source {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.picker__source .segmented button {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+.point-map .picker__source {
+  margin-bottom: 6px;
+}
+
+.point-map .picker__source .segmented {
+  display: inline-flex;
+}
+
+/* Вкладки модерации на телефоне — в несколько строк, а не лентой вбок: в
+   ленте «Правила» и «Ожидают» со счётчиками уходили за край, и узнать о
+   новых заявках можно было, только пролистав её (30.09) */
+@media (max-width: 900px) {
+}
+
+/* --- отчёты о кругах разбора (модерация → «Отчёты») --- */
+.report__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+.report__stats > div {
+  display: flex;
+  flex-direction: column;
+  background: var(--grouped);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+/* плашка с постами — кнопка: нажал — внизу её посты (повторно — закрыть) */
+.report__stats > div:has(.report__stat) {
+  padding: 0;
+}
+.report__stat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.report__stat:hover {
+  border-color: rgba(77, 162, 255, 0.45);
+}
+.report__stat[aria-pressed='true'] {
+  border-color: var(--tint-text);
+  background: rgba(0, 122, 255, 0.18);
+}
+.report__stat-name {
+  color: var(--secondary);
+  font-size: 12px;
+}
+.report__stat-value {
+  margin: 2px 0 0;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.report__stat .report__stat-value {
+  color: var(--tint-text);
+}
+.report__notes {
+  margin: 8px 0;
+  padding-left: 18px;
+  line-height: 1.45;
+}
+.report__head {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--header);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.report__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.report__list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--separator);
+  line-height: 1.4;
+}
+.report__post {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--tint-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.report__reason {
+  color: var(--secondary);
+}
+.report__reason b {
+  color: var(--text);
+  font-weight: 500;
+}
+.report__reason--done {
+  color: var(--green, #34c759);
+}
+/* вкладки списков отчёта: «не назвала места», «не нашёл», «вручную» */
+.report__tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  margin: 14px 0 8px;
+}
+
+/* Включённый фильтр — заметен: выбранное место или канал залито, а над
+   картой и списком — заголовок «Магаданская область · 17 постов» и выход */
+.select--on {
+  border-color: var(--tint);
+  color: var(--tint-text);
+}
+.scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 10px;
+}
+.scope__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+.scope__count {
+  margin-left: 10px;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--secondary);
+}

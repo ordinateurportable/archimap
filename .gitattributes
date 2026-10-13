@@ -1,0 +1,10 @@
+# Переводы строк — LF во всём репозитории. На Windows git иначе мог бы
+# отдать скрипты с CRLF, и на сервере install.sh падает на «set: pipefail»
+# с CR на конце (30.09)
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.woff binary
+*.woff2 binary
+*.pbf binary

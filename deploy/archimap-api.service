@@ -1,0 +1,37 @@
+# Юнит systemd для сервера правок.
+# Положить в /etc/systemd/system/archimap-api.service, затем:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now archimap-api
+#   sudo journalctl -u archimap-api -f     # смотреть лог
+
+[Unit]
+Description=archimap: сервер правок и предложений
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/srv/archimap/server
+ExecStart=/usr/bin/node --env-file-if-exists=/srv/archimap/server/.env /srv/archimap/server/index.js
+Restart=on-failure
+RestartSec=3
+
+Environment=NODE_ENV=production
+# Пароль, TRUST_PROXY и прочее — в /srv/archimap/server/.env,
+# чтобы они не попадали в этот файл и в логи systemd.
+#
+# Служба работает от www-data, поэтому .env должен быть ей доступен:
+#   chown root:www-data /srv/archimap/server/.env
+#   chmod 640 /srv/archimap/server/.env
+# С правами 600 у root Node сообщит «.env not found» и упадёт на
+# проверке пароля — сообщение об этом не намекает.
+
+# Писать серверу можно только в свою папку с данными.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/archimap/data
+
+[Install]
+WantedBy=multi-user.target

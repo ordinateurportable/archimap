@@ -1,0 +1,4 @@
+[out:json][timeout:300];
+area["boundary"="administrative"]["admin_level"="2"]["name"="Россия"]->.ru;
+node(area.ru)["railway"="station"]["station"="subway"]["name"];
+out body;

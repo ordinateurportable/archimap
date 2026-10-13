@@ -1,0 +1,7 @@
+[out:json][timeout:600];
+(
+  area["name"="Москва"]["admin_level"="4"];
+  area["name"="Санкт-Петербург"]["admin_level"="4"];
+)->.c;
+relation(area.c)["boundary"="administrative"]["admin_level"~"^(8|9)$"]["name"];
+out center tags;

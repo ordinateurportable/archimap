@@ -1,0 +1,45 @@
+node_modules/
+dist/
+__pycache__/
+
+# Выгрузки телеграм-каналов — тексты и фотографии авторов, в репозиторий
+# не идут (папки перечислены в tools/sources.py)
+Archi/
+Swaps_and_churches/
+ozzed expeditions/
+photos-web/
+
+# Данные: справочники GeoNames и реестров (сотни мегабайт), кэши
+# геокодеров, разобранные посты, правки админа, ответы моделей — всё
+# скачивается или пересобирается конвейером. Что где — data/README.md
+data/*
+!data/README.md
+!data/overpass_*.txt
+web/public/data/
+
+# ключи и настройки окружения; куда выкладывать (адрес сервера, ключ SSH)
+deploy/target.env
+server/.env
+web/.env.local
+tools/.geocoder-key
+tools/.wikimapia-key
+tools/.groq-key
+tools/.yandex-geocoder-key
+
+# выкладка: архивы и папка сборки
+*.tar
+stage/
+
+# сохранённые чужие страницы, скриншоты, журналы
+*.htm
+*_files/
+web/*.png
+ysearch.png
+*.log
+*.lock
+
+# локальные настройки Claude Code
+.claude/settings.local.json
+
+# рабочие заметки для Claude Code: ход кругов разбора, сервер — только у себя
+CLAUDE.md

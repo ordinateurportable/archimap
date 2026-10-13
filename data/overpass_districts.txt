@@ -1,0 +1,4 @@
+[out:json][timeout:600];
+area["boundary"="administrative"]["admin_level"="2"]["name"="Россия"]->.ru;
+node(area.ru)["place"~"^(suburb|quarter|borough)$"]["name"];
+out body;
