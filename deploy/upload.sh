@@ -104,4 +104,9 @@ echo "   шрифт запасной карты:     $(code "$SITE/fonts/Noto%20
 echo "   карта через наш сервер:   $(code "$SITE/ofm/styles/positron") (ждём 200)"
 echo "   тайл через наш сервер:    $(code "$SITE/ofm/planet") (ждём 200)"
 echo "   запасная через наш сервер: $(code "$SITE/osm/5/19/9.png") (ждём 200)"
+
+# правки, сделанные на стенде, — обратно к конвейеру (tools/edits_store.py):
+# без этого ручные точки со стенда не шли модели в примеры и в словарь мест
+echo "== правки со стенда"
+bash deploy/pull-edits.sh || echo "   не скачались — повторить: bash deploy/pull-edits.sh"
 echo "готово"

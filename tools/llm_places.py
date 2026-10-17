@@ -13,8 +13,9 @@
         tools/llm_prompt.md. Первыми идут посты, которые модератор отправил
         на доработку (с прошлым ответом и его пояснением), а ручные точки
         модератора становятся примерами — data/llm/examples.json.
-        --edits — edits.json со стенда (правки модератора живут там):
-        ssh … cat /srv/archimap/data/edits.json > data/edits-stand.json
+        Правки берутся из склейки локального data/edits.json и стендового
+        data/edits-stand.json (tools/edits_store.py; стендовый скачивает
+        deploy/pull-edits.sh); --edits — один конкретный файл.
     python tools/llm_places.py merge
         читает ответы data/llm/answer-NN.json, ищет точки геокодером
         (с теми же проверками), складывает в data/llm_places.json и
@@ -22,7 +23,7 @@
 
 Модель называет места, но не координаты: координаты ставит геокодер.
 """
-import argparse, glob, json, os, re, sys, time, urllib.request
+import argparse, functools, glob, json, os, re, sys, time, urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -69,15 +70,15 @@ def select(args):
     by_key = {key_of(p): p for p in posts}
     done = json.load(open(STORE, encoding="utf-8")) if os.path.exists(STORE) else {}
     edits, rework, examples = set(), {}, []
-    edits_path = args.edits or os.path.join(DATA, "edits.json")
-    if os.path.exists(edits_path):
-        e = json.load(open(edits_path, encoding="utf-8"))
+    from edits_store import load_edits
+    e = load_edits(args.edits)
+    if e:
         # ручные точки: главная (location) и остальные (extra), если пост
         # про несколько зданий
         located = {k: [v["location"], *v.get("extra", [])]
                    for k, v in e.get("edits", {}).items() if v.get("location")}
         related = {k: v.get("related", []) for k, v in e.get("edits", {}).items() if v.get("location")}
-        edits = set(located) | set(e.get("hidden", {}))
+        edits = set(located) | set(e.get("hidden", {})) | set(e.get("reviewed") or {})
         # ручные точки модератора — примеры того, какой точности ждём, и
         # связанные места, если модератор их отметил
         for k, locs in list(located.items())[-args.examples:]:
@@ -93,6 +94,10 @@ def select(args):
         # отправил на доработку, а потом сам поставил точку или скрыл пост —
         # решение принято, модели он больше не нужен
         rework = {k: v for k, v in rework.items() if k not in edits}
+        # модель уже ответила после «на доработку» — ждём модератора
+        at = {sug["key"]: sug.get("at", "") for sug in e.get("suggestions", [])
+              if sug.get("from") == "model" and sug.get("status") == "rework"}
+        rework = {k: v for k, v in rework.items() if (done.get(k) or {}).get("reworked") != at.get(k)}
     os.makedirs(LLM_DIR, exist_ok=True)
     with open(os.path.join(LLM_DIR, "examples.json"), "w", encoding="utf-8") as f:
         json.dump(examples, f, ensure_ascii=False, indent=1)
@@ -113,6 +118,7 @@ def select(args):
     os.makedirs(LLM_DIR, exist_ok=True)
     for f in glob.glob(os.path.join(LLM_DIR, "batch-*.json")):
         os.remove(f)
+    before = previous_posts(posts)
     for n in range(0, len(picked), args.batch):
         rows = []
         for p in picked[n:n + args.batch]:
@@ -123,6 +129,7 @@ def select(args):
                 "rules_places": [x["name"] for x in p["places"]],
                 "rules_streets": p["streets"],
                 "rules_objects": p.get("objects", []),
+                **({"before": before[key_of(p)]} if key_of(p) in before else {}),
                 **rework.get(key_of(p), {}),
             })
         path = os.path.join(LLM_DIR, f"batch-{n // args.batch + 1:02d}.json")
@@ -130,6 +137,34 @@ def select(args):
         print(path, len(rows))
     print("отобрано", len(picked), "из", len(pool), "| сложность от", hardness(picked[-1]) if picked else "-",
           "до", hardness(picked[0]) if picked else "-")
+
+
+BEFORE_MINUTES = 15
+
+
+def previous_posts(posts):
+    """Предыдущий пост канала, если он вышел не раньше чем за 15 минут: в
+    ранние годы канал писал сериями, и место называлось в первом посте, а
+    следующий — «Прошу прощения за качество изображений… скриншоты из фильма
+    Парфенова» (arkh-786) — продолжал его про лондонскую улицу Альмы
+    (arkh-785, за 3 минуты до того). Модели — как контекст: текст и места."""
+    from datetime import datetime
+    out = {}
+    by_src = {}
+    for p in posts:
+        if p.get("date") and p.get("text", "").strip():
+            by_src.setdefault(p["src"], []).append(p)
+    for chain in by_src.values():
+        chain.sort(key=lambda p: p["date"])
+        for prev, cur in zip(chain, chain[1:]):
+            try:
+                gap = (datetime.fromisoformat(cur["date"]) - datetime.fromisoformat(prev["date"])).total_seconds()
+            except ValueError:
+                continue
+            if 0 <= gap <= BEFORE_MINUTES * 60:
+                out[key_of(cur)] = {"minutes": round(gap / 60), "text": prev["text"][:800],
+                                    "places": [x["name"] for x in prev.get("places", [])]}
+    return out
 
 
 def api(path, body=None, token=None):
@@ -231,6 +266,71 @@ def locate_address(answer, where, center):
     return None
 
 
+# Модель пишет республики полностью («Республика Алтай», «Чувашская
+# Республика»), а в справочнике регионов они короткие («Алтай», «Чувашия»):
+# 16.10 так 59 постов остались вовсе без точки — метеостанция Кара-Тюрек
+# не искалась по области, потому что «Республики Алтай» в справочнике нет
+REGION_ALIASES = {
+    "чувашская": "Чувашия", "удмуртская": "Удмуртия", "чеченская": "Чечня",
+    "кабардино-балкарская": "Кабардино-Балкария", "карачаево-черкесская": "Карачаево-Черкесия",
+    "крымская": "Крым", "чукотка": "Чукотский АО", "саха": "Якутия",
+    "северная осетия-алания": "Северная Осетия", "северная осетия — алания": "Северная Осетия",
+    "северная осетия - алания": "Северная Осетия", "карачаево-черкессия": "Карачаево-Черкесия",
+    "хмао": "Ханты-Мансийский АО", "еврейская автономная область": "Еврейская АО",
+    # опечатки и старые имена
+    "вологдская область": "Вологодская область", "пензанская область": "Пензенская область",
+    "калиниградская область": "Калининградская область", "пермская область": "Пермский край",
+    "читинская область": "Забайкальский край", "забайкалье": "Забайкальский край",
+}
+
+
+@functools.lru_cache(maxsize=None)
+def _region_names():
+    return frozenset(r["n"] for r in json.load(open(os.path.join(DATA, "gazetteer.json"),
+                                                     encoding="utf-8")).get("regions", []))
+
+
+def canon_region(name):
+    """«Республика Татарстан» → «Татарстан», «Ханты-Мансийский автономный
+    округ — Югра» → «Ханты-Мансийский АО»; неизвестное — как есть."""
+    name = (name or "").strip()
+    known = _region_names()
+    # перечень («Ставропольский край, Карачаево-Черкесия») — не одна область
+    if not name or name in known or "," in name:
+        return name
+    if REGION_ALIASES.get(name.lower()) in known:
+        return REGION_ALIASES[name.lower()]
+    s = re.sub(r"\s*\((.*?)\)", r" \1", name)            # «Саха (Якутия)»
+    s = re.sub(r"\s+—\s+Югра$", "", s)
+    s = re.sub(r"(?i)\bреспублика\b", "", s)
+    s = re.sub(r"автономный округ", "АО", s)
+    s = " ".join(s.split())
+    for cand in (s, s.split(" ")[-1], REGION_ALIASES.get(s.lower()), REGION_ALIASES.get(s.split(" ")[0].lower())):
+        if cand and cand in known:
+            return cand
+    return name
+
+
+def wikivoyage_address(name, city, center):
+    """Объект из списков наследия Викигида без точки, но с адресом: «Здание
+    Пастората… Казанская улица, 102-А» (Астрахань, 16.10) — дом по адресу
+    ищет геокодер. Запись должна быть одна в этом городе, а дом — найден
+    рядом с ним (ask_address). Сеть: один запрос к геокодеру."""
+    import classify
+    import geocode_streets as g
+    import local_places
+    rec = local_places.addressed(name, city)
+    if not rec:
+        return None
+    streets = classify.find_streets(rec["address"])
+    if not streets or not re.search(r",\s*\d", streets[0]):
+        return None
+    point = g.ask(city, streets[0], center)
+    if not point:
+        return None
+    return {"lat": point["lat"], "lon": point["lon"], "src": "wv-address"}, rec, streets[0]
+
+
 def region_in_text(region, text):
     """«Рязанская область» названа в посте («в Рязанской области»)?"""
     words = [w for w in re.findall(r"[А-ЯЁа-яё]+", region or "") if w[:1].isupper()]
@@ -244,15 +344,50 @@ def locate(answer, coords, text=None):
     saved = g.REGION_CHECK
     g.REGION_CHECK = text is None or region_in_text(answer.get("region"), text)
     try:
-        return _locate(answer, coords)
+        if text is None:
+            return _locate(answer, coords)
+        # Адрес среди кандидатов, которого нет в тексте, — тоже по памяти
+        # модели и проверяется так же, как поле address (16.10: Qwen дал
+        # Кавалерийскому училищу «улицу Рубинштейна, 12» — училище на
+        # Лермонтовском, 54, а геокодер нашёл дом и поставил точку; так
+        # стояли ~25 постов)
+        kept, recalled = [], []
+        for c in answer.get("candidates") or []:
+            (recalled if memory_address(c, text) else kept).append(c)
+        if not recalled:
+            return _locate(answer, coords)
+        probe = {**answer, "candidates": kept, "address": (answer.get("address") or "").strip() or recalled[0]}
+        try:
+            return _locate(probe, coords)
+        finally:
+            if probe.get("address_unverified"):
+                answer["address_unverified"] = probe["address_unverified"]
     finally:
         g.REGION_CHECK = saved
+
+
+def memory_address(candidate, text):
+    """«улица Рубинштейна, 12», а в тексте поста этого дома нет."""
+    import classify
+    streets = classify.find_streets(candidate or "")
+    m = streets and re.search(r",\s*(\d+)", streets[0])
+    if not m:
+        return False
+    low = (text or "").lower().replace("ё", "е")
+    words = [w for w in re.findall(r"[А-ЯЁа-яё]{4,}", streets[0].split(",")[0])
+             if w.lower() not in STREET_TYPE_WORDS]
+    named = all(w[:5].lower().replace("ё", "е") in low for w in words)
+    return not (named and re.search(rf"(?<!\d){m.group(1)}(?!\d)", low))
+
+
+STREET_TYPE_WORDS = {"улица", "проспект", "переулок", "набережная", "шоссе", "площадь", "бульвар",
+                     "проезд", "линия", "тупик", "аллея"}
 
 
 def _locate(answer, coords):
     import geocode_streets as g
     city = (answer.get("city") or "").strip()
-    region = (answer.get("region") or "").strip()
+    region = canon_region(answer.get("region"))
     where = city if city in coords else (region if region in coords else None)
     if not where:
         return None, None
@@ -278,7 +413,7 @@ def _locate(answer, coords):
     if locality and locality != city:
         import local_places
         spot = g.ask(where, "loc:" + locality, center)
-        parent = (answer.get("_post_region") or "").strip()
+        parent = canon_region(answer.get("_post_region"))
         if not spot and parent in coords and parent != where:
             spot = g.ask(parent, "loc:" + locality, coords[parent])
         if spot:
@@ -305,6 +440,13 @@ def _locate(answer, coords):
         if hit:
             name = item.split(":", 1)[1] if item.startswith(("obj:", "loc:")) else item
             return hit, f"{name} · {where}"
+    # объект нашёлся только адресом в списках Викигида — ищем дом
+    for item in candidates_of(answer):
+        if item.startswith("obj:") and where == city:
+            got = wikivoyage_address(item[4:], city, center)
+            if got:
+                point, rec, street = got
+                return point, f"{item[4:]} ({street}) · {where}"
     found = locate_address(answer, where, center)
     if found:
         return found
@@ -364,6 +506,12 @@ def merge(args):
         print("локальный сервер не отвечает: предложения только в", EXPORT)
     sent = found = 0
     bodies = []
+    # посты «на доработке»: новый ответ помечаем — на стенде он заменит
+    # прежний (post-suggestions иначе не трогает решённое), а select больше
+    # не отдаёт пост модели (16.10: набережная Миасса шла в каждый круг)
+    from edits_store import load_edits
+    rework = {x["key"]: x.get("at", "") for x in load_edits().get("suggestions", [])
+              if x.get("from") == "model" and x.get("status") == "rework"}
     for a in answers:
         k = a.get("key")
         # повторный ответ по посту «на доработке» заменяет прежний
@@ -395,7 +543,8 @@ def merge(args):
             if (p2 and " · " in (l2 or "") and p2 != point
                     and all(p2 != e["point"] for e in extra + related)):
                 related.append({"point": p2, "label": l2})
-        store[k] = {**a, "point": point, "label": label, "extra": extra, "related": related}
+        store[k] = {**a, "point": point, "label": label, "extra": extra, "related": related,
+                    **({"reworked": rework[k]} if k in rework else {})}
         # в модерацию: текст — что решила модель и почему
         names = [label or a.get("city") or "место не определено"] + [e["label"] for e in extra]
         parts = [f"Модель: {'; '.join(names)}"]
@@ -418,7 +567,8 @@ def merge(args):
                 **({"extra": [{**e["point"], "label": e["label"]} for e in extra]} if extra and point else {}),
                 **({"related": [{**e["point"], "label": e["label"]} for e in related]} if related else {}),
                 # «похоже на рекламу» — пометкой в карточке, скрыть решает админ
-                **({"ad": a["ad"]} if isinstance(a.get("ad"), str) and a["ad"].strip() else {})}
+                **({"ad": a["ad"]} if isinstance(a.get("ad"), str) and a["ad"].strip() else {}),
+                **({"reworked": True} if k in rework else {})}
         bodies.append(body)
         if token:
             api("/suggestions/model", body, token)
@@ -445,11 +595,12 @@ def local_retry(args):
     for r in json.load(open(os.path.join(DATA, "gazetteer.json"), encoding="utf-8")).get("regions", []):
         coords.setdefault(r["n"], (r["lat"], r["lon"]))
     store = json.load(open(STORE, encoding="utf-8"))
-    located = set()
-    edits_path = os.path.join(DATA, "edits.json")
-    if os.path.exists(edits_path):
-        e = json.load(open(edits_path, encoding="utf-8"))
-        located = {k for k, v in e.get("edits", {}).items() if v.get("location")} | set(e.get("hidden", {}))
+    from edits_store import load_edits
+    e = load_edits()
+    # «Принять: точнее не найти / места нет» в отчётах — решение админа: такой
+    # пост повторно не ищем (16.10: 11 принятых снова уходили искателю)
+    located = ({k for k, v in e.get("edits", {}).items() if v.get("location")} | set(e.get("hidden", {}))
+               | set(e.get("reviewed") or {}))
     out = []
 
     def on_village(a):
@@ -476,7 +627,7 @@ def local_retry(args):
                                 "note": f"свои справочники: {hit['name']} в 3 км от села"})
                     break
             continue
-        city, region = (a.get("city") or "").strip(), (a.get("region") or "").strip()
+        city, region = (a.get("city") or "").strip(), canon_region(a.get("region"))
         where = city if city in coords else (region if region in coords else None)
         if not where:
             continue
@@ -491,6 +642,15 @@ def local_retry(args):
                 out.append({"key": k, "lat": hit["lat"], "lon": hit["lon"], "label": f"{name} · {where}",
                             "source": "local", "confidence": "medium", "note": f"свои справочники: {name}"})
                 break
+            # в списках Викигида объект есть только с адресом — дом ищет
+            # геокодер (единственный сетевой шаг этого прогона)
+            got = wikivoyage_address(name, city, coords[where]) if where == city and args.addresses else None
+            if got:
+                point, rec, street = got
+                out.append({"key": k, "lat": point["lat"], "lon": point["lon"],
+                            "label": f"{name} ({street}) · {where}", "source": "local", "confidence": "medium",
+                            "note": f"Викигид: «{rec['name'][:80]}», {rec['address']}; дом — геокодер"})
+                break
     # Посты вовсе без точки, но с областью и объектом («музей под открытым
     # небом Малые Корелы · Архангельская область», «Ангарская деревня ·
     # Иркутская область»): геокодер искал в 150 км от центра области и не
@@ -502,10 +662,10 @@ def local_retry(args):
     regions = {r["n"] for r in json.load(open(os.path.join(DATA, "gazetteer.json"), encoding="utf-8")).get("regions", [])}
     bare = [(k, a) for k, a in store.items()
             if not a.get("point") and a.get("candidates") and not a.get("digest") and not a.get("ad")
-            and k not in located and (a.get("region") or "").strip() in regions]
+            and k not in located and canon_region(a.get("region")) in regions]
     g.REGION_CHECK = True
     for k, a in bare:
-        region = a["region"].strip()
+        region = canon_region(a["region"])
         for item in candidates_of(a):
             if not item.startswith("obj:"):
                 continue
@@ -539,11 +699,12 @@ def yandex_retry(args):
     for r in json.load(open(os.path.join(DATA, "gazetteer.json"), encoding="utf-8")).get("regions", []):
         coords.setdefault(r["n"], (r["lat"], r["lon"]))
     store = json.load(open(STORE, encoding="utf-8"))
-    located = set()
-    edits_path = os.path.join(DATA, "edits.json")
-    if os.path.exists(edits_path):
-        e = json.load(open(edits_path, encoding="utf-8"))
-        located = {k for k, v in e.get("edits", {}).items() if v.get("location")} | set(e.get("hidden", {}))
+    from edits_store import load_edits
+    e = load_edits()
+    # «Принять: точнее не найти / места нет» в отчётах — решение админа: такой
+    # пост повторно не ищем (16.10: 11 принятых снова уходили искателю)
+    located = ({k for k, v in e.get("edits", {}).items() if v.get("location")} | set(e.get("hidden", {}))
+               | set(e.get("reviewed") or {}))
     fresh = (datetime.date.today() - datetime.timedelta(days=g.YANDEX_RECHECK_DAYS)).isoformat()
     asked = g.yandex_asked()
     out, requests = [], 0
@@ -551,7 +712,7 @@ def yandex_retry(args):
             if a.get("point") and " · " not in (a.get("label") or "") and a.get("candidates")
             and not a.get("digest") and not a.get("ad") and k not in located]
     for k, a in todo:
-        city, region = (a.get("city") or "").strip(), (a.get("region") or "").strip()
+        city, region = (a.get("city") or "").strip(), canon_region(a.get("region"))
         where = city if city in coords else (region if region in coords else None)
         if not where:
             continue
@@ -759,6 +920,11 @@ def pin_credit(by):
     return f"точку уточнил {model_title(by or 'claude-sonnet')}"
 
 
+def found_points(items):
+    return [{**e["point"], "label": e["label"]} for e in items or ()
+            if isinstance(e, dict) and e.get("point")]
+
+
 def pin_body(k, a, default_model="claude-haiku"):
     """Предложение для модерации по уточнённой точке."""
     label, point = a["label"], {"lat": a["point"]["lat"], "lon": a["point"]["lon"]}
@@ -771,8 +937,10 @@ def pin_body(k, a, default_model="claude-haiku"):
             "from": "model", "label": label, **point,
             "model": f"{model_title(a.get('model') or default_model)}, {pin_credit(a.get('pinned_by'))}",
             # вторые точки поста и связанные места — те же, что дал merge
-            **({"extra": [{**e["point"], "label": e["label"]} for e in a["extra"]]} if a.get("extra") else {}),
-            **({"related": [{**e["point"], "label": e["label"]} for e in a["related"]]} if a.get("related") else {}),
+            # у поста без точки merge оставляет ответ модели как есть — там
+            # строки без точек, их не переносим
+            **({"extra": found_points(a["extra"])} if found_points(a.get("extra")) else {}),
+            **({"related": found_points(a["related"])} if found_points(a.get("related")) else {}),
             **({"ad": a["ad"]} if isinstance(a.get("ad"), str) and a["ad"].strip() else {})}
 
 
@@ -851,7 +1019,7 @@ def main():
     s = sub.add_parser("select")
     s.add_argument("--limit", type=int, default=100)
     s.add_argument("--batch", type=int, default=25)
-    s.add_argument("--edits", help="edits.json (по умолчанию локальный data/edits.json)")
+    s.add_argument("--edits", help="один файл правок (по умолчанию — локальные вместе со стендовыми)")
     s.add_argument("--examples", type=int, default=12, help="сколько ручных точек дать в примеры")
     m = sub.add_parser("merge")
     m.add_argument("--redo", action="store_true", help="заменить прежние ответы (после доработки)")
@@ -877,6 +1045,8 @@ def main():
     y.add_argument("--out", default=os.path.join(LLM_DIR, "pin-yandex.json"))
     lc = sub.add_parser("local", help="кандидаты предложений с точкой на городе — своими справочниками")
     lc.add_argument("--out", default=os.path.join(LLM_DIR, "pin-local.json"))
+    lc.add_argument("--addresses", action="store_true",
+                    help="искать и дома по адресам из списков Викигида (запросы к геокодеру)")
     args = ap.parse_args()
     {"select": select, "merge": merge, "ask": ask, "pin": pin, "yandex": yandex_retry,
      "local": local_retry, "credits": credits}[args.cmd](args)

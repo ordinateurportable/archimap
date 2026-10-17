@@ -86,6 +86,9 @@ LOCALITY_PREFIXES = ("пос. ", "с. ", "дер. ", "х. ", "ст-ца ", "мк
 REGION_KIND_RE = re.compile(r"\b(?:республика|область|край|автономный округ|автономная область|ао)\b")
 
 
+TWIN_REGIONS = [{"москва", "московская"}, {"санкт", "петербург", "ленинградская"}, {"севастополь", "крым"}]
+
+
 def same_region(state, region):
     """«Республика Мордовия» — это «Мордовия», «Чувашская Республика» —
     «Чувашия», «Республика Саха (Якутия)» — «Якутия». Сравнение дословно
@@ -95,6 +98,12 @@ def same_region(state, region):
     if not a or not b:
         return False
     if a == b or set(b) <= set(a):
+        return True
+    # «Подмосковье» бывает юридически Москвой: Сосенки, Коммунарка — Новая
+    # Москва (16.10, «деревня Сосенки в Подмосковье» не находилась в
+    # Московской области); так же Пушкин и Петергоф — Петербург, а не
+    # Ленобласть, Севастополь — не Республика Крым
+    if any(set(a) <= pair and set(b) <= pair and a != b for pair in TWIN_REGIONS):
         return True
     # «чувашская» и «чувашия», «удмуртская» и «удмуртия» — общее начало
     return len(a) == len(b) == 1 and a[0][:5] == b[0][:5]
@@ -108,7 +117,31 @@ def is_street(tag):
 def city_coords():
     with open(os.path.join(DATA, "gazetteer.json"), encoding="utf-8") as f:
         raw = json.load(f)
-    return {c["n"]: (c["lat"], c["lon"]) for c in raw["ru"]}
+    out = {c["n"]: (c["lat"], c["lon"]) for c in raw["ru"]}
+    # село Крым под Ростовом (4,5 тыс. жителей) перебивало республику: всё
+    # «в Крыму» искалось у Ростова-на-Дону (16.10, «Дружба · Крым» встала там)
+    for r in raw.get("regions", []):
+        if r["n"] in out and distance_km(out[r["n"]], (r["lat"], r["lon"])) > 50:
+            out[r["n"]] = (r["lat"], r["lon"])
+    return out
+
+
+_region_names = None
+# города-регионы — это города: в них ищем как в городе
+CITY_REGIONS = {"Москва", "Санкт-Петербург", "Севастополь"}
+
+
+def is_region(name):
+    """«Московская область», «Республика Карелия» — по словам; «Крым»,
+    «Татарстан», «Алтай» — по справочнику регионов: раньше их искали как
+    город, в радиусе в пару десятков километров от центра."""
+    global _region_names
+    if any(w in (name or "") for w in REGION_WORDS[:-1]):
+        return True
+    if _region_names is None:
+        with open(os.path.join(DATA, "gazetteer.json"), encoding="utf-8") as f:
+            _region_names = {r["n"] for r in json.load(f).get("regions", [])} - CITY_REGIONS
+    return name in _region_names
 
 
 _regions = {}
@@ -196,7 +229,7 @@ BIG_CITY = 1_000_000
 def ambiguous_dedication(city, item):
     if not item.startswith("obj:") or not DEDICATION_RE.search(item[4:]):
         return False
-    in_region = any(w in city for w in REGION_WORDS[:-1])
+    in_region = is_region(city)
     return in_region or population(city) >= BIG_CITY or population(city) == 0
 
 
@@ -398,7 +431,7 @@ def ask_osm(city, street, center):
     is_obj = street.startswith("obj:")
     is_loc = street.startswith("loc:")
     name = street[4:] if is_obj or is_loc else street
-    in_region = any(w in city for w in REGION_WORDS[:-1])
+    in_region = is_region(city)
     want = norm(name)
 
     # «тупик Свободы» в тексте — «1-й … 5-й тупик Свободы» на карте: серия
@@ -475,6 +508,12 @@ def ask_osm(city, street, center):
         # Geoapify сам подставляет «ё»: «Черная Грязь» находит «Чёрную»
         text = f"{name}, {city}" if in_region or not is_loc else name
         hit = accept(geoapify(text, center, kind, 10 if is_loc or kind == "street" else 5, bias=not in_region))
+        # «Сосенки, Московская область» — Geoapify отдаёт одни СНТ, а деревня
+        # Сосенки числится в Москве и в выдачу не попадает: ещё раз без
+        # области, а что в паре регионов — проверит same_region
+        if hit is None and in_region and any(set(norm(city).split()) & pair for pair in TWIN_REGIONS):
+            time.sleep(PAUSE)
+            hit = accept(geoapify(name, center, kind, 10, bias=True))
         # «Дворцовая площадь» в Казани записана не улицей, а площадью-сквером:
         # второй запрос без фильтра, но только с точным совпадением названия
         if hit is None and kind == "street":
@@ -560,7 +599,7 @@ def names_match(want, got, is_obj):
 def pick(candidates, city, center, is_loc):
     """Из найденных — единственный в городе поста (или в названной области).
     Два разных места с одним названием рядом — не угадываем."""
-    in_region = any(w in city for w in REGION_WORDS[:-1])
+    in_region = is_region(city)
     limit = 300 if in_region else (50 if is_loc else radius_km(city))
     near = [(lat, lon) for lat, lon in candidates if distance_km(center, (lat, lon)) <= limit
             and (not (in_region and REGION_CHECK) or region_ok(city, (lat, lon)))]
@@ -702,7 +741,7 @@ def ask_yandex(city, name, center, is_obj, is_loc, pair=None):
     # и в потолок --max-requests: иначе прогон съедает весь суточный лимит,
     # и Яндекс-карте в форме точки не остаётся ни одного поиска
     REQUESTS += 1
-    in_region = any(w in city for w in REGION_WORDS[:-1])
+    in_region = is_region(city)
     params = {"apikey": YANDEX_KEY, "geocode": f"{city}, {name}", "format": "json", "lang": "ru_RU",
               "results": 5, "ll": f"{center[1]},{center[0]}", "spn": "1.0,1.0"}
     # свой запрос, не get_json: тот на 403 ждёт по пять минут, а у Яндекса
@@ -774,7 +813,7 @@ def ask_local(city, name, center, radius=None):
     # «Варшавское шоссе, 141» — адрес, его ищет геокодер по дому
     if re.search(r"\d", name):
         return None
-    in_region = any(w in city for w in REGION_WORDS[:-1])
+    in_region = is_region(city)
     # область — 150 км от центра: «Ильинские луга» Подмосковья иначе находились
     # под Суздалем (190 км), а границ областей в справочниках нет
     radius = radius or (150 if in_region else radius_km(city))
@@ -792,6 +831,10 @@ def ask_local(city, name, center, radius=None):
     if (in_region or radius > 150) and REGION_CHECK:
         hits = [h for h in hits if region_ok(city, (h["lat"], h["lon"]))]
     hit = local_places.pick(hits)
+    # прозвище в кавычках («Мавритания»), которого нет в реестре, — по одному
+    # типу, если в городе такой объект один; по области — нет, их там много
+    if not hit and not hits and not in_region and radius <= 150:
+        hit = local_places.search_by_kind(name, center, radius)
     return {"lat": round(hit["lat"], 6), "lon": round(hit["lon"], 6)} if hit else None
 
 

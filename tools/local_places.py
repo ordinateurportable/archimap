@@ -16,7 +16,7 @@
 
     import local_places; local_places.search("Дом Чернухина", (53.15, 48.47), 20)
 """
-import functools, json, math, os, re, sqlite3
+import functools, json, math, os, pickle, re, sqlite3
 
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 HERITAGE = os.path.join(DATA, "heritage.json")
@@ -95,7 +95,7 @@ TYPES = set().union(*FAMILIES) | {
     "планетарий", "элеватор", "водокачка", "мельница", "кладбище", "пруд", "озеро", "остров",
     "часовня", "колокольня", "набережная", "улица", "переулок", "проспект", "луг", "роща",
     "село", "деревня", "посёлок", "поселок", "автогараж", "гараж", "филармония", "магазин",
-    "мемориал",
+    "мемориал", "метеостанция",
 }
 
 
@@ -118,11 +118,22 @@ def pos(lem):
     return _morph().parse(lem)[0].tag.POS
 
 
+# сокращённый тип = полный: модель пишет «метеостанция Кара-Тюрек», в OSM —
+# «Метеорологическая станция Кара-Тюрек»
+COMPOUNDS = {("метеорологический", "станция"): "метеостанция"}
+
+
 def lemmas(name):
     # инициалы («В. Н. Слепцова») — не слова названия; скобки в реестре —
     # уточнение, где стоит («Казанская церковь (Бороздино)»), а не имя
     name = re.sub(r"\([^)]*\)", " ", name or "")
-    return [lemma(w) for w in WORD_RE.findall(name) if len(w) > 1 or w.isdigit()]
+    out = [lemma(w) for w in WORD_RE.findall(name) if len(w) > 1 or w.isdigit()]
+    for pair, short in COMPOUNDS.items():
+        for i in range(len(out) - 1):
+            if tuple(out[i:i + 2]) == pair:
+                out[i:i + 2] = [short]
+                break
+    return out
 
 
 # «Я был здесь»: глагол, наречие, местоимение — не слова названия
@@ -137,8 +148,10 @@ def distinctive(lems):
 
 @functools.lru_cache(maxsize=300_000)
 def is_adj(lem):
-    # «успенский» первым разбором — фамилия, но это и прилагательное
-    return any(p.tag.POS in ("ADJF", "PRTF") for p in _morph().parse(lem))
+    # «успенский» первым разбором — фамилия, но это и прилагательное.
+    # Притяжательное («петров» — чей? Петров) — это фамилия: «Дача Петрова» в
+    # Ижевске не находилась как обрывок вроде «Дома Калужского» (16.10)
+    return any(p.tag.POS in ("ADJF", "PRTF") and "Poss" not in p.tag for p in _morph().parse(lem))
 
 
 def adjectives_only(want):
@@ -174,12 +187,12 @@ def km(a, b):
     return math.hypot(a[0] - b[0], (a[1] - b[1]) * k) * 111.2
 
 
-def matches(query_lems, want, name_lems, tag_kind=None):
+def matches(query_lems, want, name_lems, tag_kind=None, max_extra=2):
     """Все значимые слова запроса есть в названии, лишних значимых — не
     больше двух, тип совместим. Возвращает число лишних слов или None.
     tag_kind — тип по тегу OSM, если в названии его нет."""
     have = distinctive(name_lems)
-    if not want <= have or len(have - want) > 2:
+    if not want <= have or len(have - want) > max_extra:
         return None
     kq, kn = kind_of(query_lems), kind_of(name_lems) or TAG_KINDS.get(tag_kind)
     # «Введенская церковь» — не село Введенское, «Петровский театр» — не
@@ -201,8 +214,32 @@ def matches(query_lems, want, name_lems, tag_kind=None):
     return len(have - want) + (1 if kq and kn and kq != kn else 0)
 
 
+def _cached(name, sources, build):
+    """Индекс, собранный из больших списков (сотни тысяч названий через
+    морфологию — ~20 с), — на диск: lookup.py запускают десятки раз за
+    задание. Пересобирается, когда список новее кэша."""
+    path = os.path.join(DATA, "cache", name + ".pickle")
+    stamp = [os.path.getmtime(f) for f in sources if os.path.exists(f)] + [os.path.getmtime(__file__)]
+    try:
+        with open(path, "rb") as f:
+            saved, value = pickle.load(f)
+        if saved == stamp:
+            return value
+    except (OSError, ValueError, EOFError, pickle.UnpicklingError):
+        pass
+    value = build()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f:
+        pickle.dump((stamp, value), f, protocol=pickle.HIGHEST_PROTOCOL)
+    return value
+
+
 @functools.lru_cache(maxsize=None)
 def heritage_index():
+    return _cached("heritage_index", (HERITAGE, EGRKN, WIKIVOYAGE), _heritage_index)
+
+
+def _heritage_index():
     """Значимая лемма -> [(запись, леммы варианта названия)]. Два списка
     наследия: из Викидаты (data/heritage.json) и выгрузка реестра Минкультуры
     (data/egrkn.json, tools/import_egrkn.py). Один памятник может быть в
@@ -216,7 +253,21 @@ def heritage_index():
                 lems = lemmas(name)
                 for l in distinctive(lems):
                     index.setdefault(l, []).append((rec, lems))
+    # третий список — Викигид, только записи с точкой (без точки — addressed)
+    for rec in wikivoyage_points():
+        lems = lemmas(rec["name"])
+        for l in distinctive(lems):
+            index.setdefault(l, []).append((rec, lems))
     return index
+
+
+@functools.lru_cache(maxsize=None)
+def wikivoyage_points():
+    if not os.path.exists(WIKIVOYAGE):
+        return []
+    return [{"name": r["name"], "lat": r["lat"], "lon": r["lon"], "q": f"wv:{r.get('knid') or r['name']}",
+             "addr": r.get("address", "")}
+            for r in json.load(open(WIKIVOYAGE, encoding="utf-8")) if "lat" in r]
 
 
 def _osm_db():
@@ -307,6 +358,112 @@ def search(name, center, radius_km=30, city=""):
                and not str(h.get("kind", "")).startswith(COMMERCIAL_TAGS)]
     out.sort(key=lambda h: h["km"])
     return out
+
+
+WIKIVOYAGE = os.path.join(DATA, "wikivoyage_heritage.json")
+
+
+@functools.lru_cache(maxsize=None)
+def wikivoyage_index():
+    return _cached("wikivoyage_index", (WIKIVOYAGE,), _wikivoyage_index)
+
+
+def _wikivoyage_index():
+    """Списки наследия Викигида (tools/fetch_wikivoyage.py): значимая лемма
+    названия -> [(запись, леммы)]. Почти полный реестр, с адресами, но точка —
+    только у части записей: «Здание Пастората… Казанская улица, 102-А» в
+    Астрахани есть только здесь (16.10)."""
+    index = {}
+    if os.path.exists(WIKIVOYAGE):
+        for rec in json.load(open(WIKIVOYAGE, encoding="utf-8")):
+            lems = lemmas(rec["name"])
+            for l in distinctive(lems):
+                index.setdefault(l, []).append((rec, lems))
+    return index
+
+
+def _same_place(a, b):
+    """«Астрахань» и «г. Астрахань», «Сергиев Посад» и «Сергиев Посад г.»."""
+    la, lb = set(lemmas(a)), set(lemmas(b))
+    return bool(la) and bool(lb) and (la <= lb or lb <= la)
+
+
+def search_wikivoyage(name, center, radius_km=30, city=""):
+    """Записи Викигида: с точкой — в радиусе от center, без точки — по
+    совпадению города (municipality/district). Совпадение названия — как у
+    search (все значимые слова запроса есть в названии)."""
+    q = lemmas(name)
+    want = distinctive(q)
+    city_l = lemmas(city)
+    if not want or all(any(c[:5] == w[:5] for c in city_l) for w in want):
+        return []
+    index = wikivoyage_index()
+    rarest = min(want, key=lambda l: len(index.get(l, ())))
+    out = []
+    # в реестре названия длинные и официальные: «Здание Пастората церкви во
+    # имя Иисуса евангелическо-лютеранского исповедания» — при двух словах
+    # запроса допускаем четыре лишних
+    max_extra = 4 if len(want) >= 2 else 2
+    for rec, lems in index.get(rarest, ()):
+        extra = matches(q, want, lems, max_extra=max_extra)
+        if extra is None:
+            continue
+        if "lat" in rec:
+            d = km(center, (rec["lat"], rec["lon"])) if center else 0
+            if center and d > radius_km:
+                continue
+            out.append({**rec, "src": "wv", "km": round(d, 1), "extra": extra})
+        elif city and (_same_place(city, rec.get("municipality", "")) or _same_place(city, rec.get("district", ""))):
+            out.append({**rec, "src": "wv", "extra": extra})
+    out.sort(key=lambda h: (h["extra"], h.get("km", 0)))
+    return out
+
+
+def addressed(name, city):
+    """Одна запись Викигида без точки, но с адресом в городе city — для
+    поиска дома геокодером. Несколько разных адресов — не угадываем."""
+    hits = [h for h in search_wikivoyage(name, None, 0, city) if "lat" not in h and h.get("address")]
+    if not hits:
+        return None
+    best = [h for h in hits if h["extra"] == hits[0]["extra"]]
+    if len({re.sub(r"\W", "", h["address"].lower()) for h in best}) > 1:
+        return None
+    return best[0]
+
+
+@functools.lru_cache(maxsize=None)
+def heritage_records():
+    out = []
+    for path in (HERITAGE, EGRKN):
+        if os.path.exists(path):
+            out += json.load(open(path, encoding="utf-8"))
+    return out
+
+
+QUOTED_RE = re.compile(r"[«\"„“][^»\"“”]*[»\"“”]")
+
+
+def search_by_kind(name, center, radius_km):
+    """Прозвище в кавычках, которого нет в реестре: «торговые ряды
+    «Мавритания»» в Благовещенске записаны как «Здание торговых рядов»
+    (16.10). Ищем то, что вне кавычек, — одни общие слова, — только в
+    реестре наследия и только если в городе такое место одно."""
+    if not QUOTED_RE.search(name or ""):
+        return None
+    q = set(lemmas(QUOTED_RE.sub(" ", name))) - {"здание"}
+    # «дом «Мавритания»» — одно слово-тип, таких в любом городе сотни
+    if len(q) < 2 or distinctive(list(q)):
+        return None
+    hits = []
+    for rec in heritage_records():
+        d = km(center, (rec["lat"], rec["lon"]))
+        if d > radius_km:
+            continue
+        lems = lemmas(rec["name"])
+        if q <= set(lems) and not distinctive(lems):
+            hits.append({"name": rec["name"], "lat": rec["lat"], "lon": rec["lon"], "src": "okn",
+                         "km": round(d, 1), "id": rec["q"], "extra": 0})
+    return pick(hits) if hits else None
 
 
 def pick(hits, spread_km=1.0):

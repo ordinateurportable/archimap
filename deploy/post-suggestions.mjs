@@ -31,7 +31,8 @@ let ok = 0
 const kept = []
 const failed = []
 for (const [i, s] of items.entries()) {
-  if (decided.has(s.key)) {
+  // новый ответ модели на «на доработку» — то, чего модератор и ждал
+  if (decided.has(s.key) && !s.reworked) {
     kept.push(s.key)
     continue
   }

@@ -91,9 +91,10 @@ def main():
     # российскому названию, а точку модели карта ставит поверх). Страна
     # точки — по ближайшему городу справочника: российские города (вместе с
     # Крымом) против остального мира.
-    edits_path = os.path.join(DATA, "edits.json")
-    manual = (json.load(open(edits_path, encoding="utf-8")).get("edits", {})
-              if os.path.exists(edits_path) else {})
+    # правки — локальные вместе со стендовыми (tools/edits_store.py): точка,
+    # поставленная на стенде за границей, тоже переносит пост в «Другие страны»
+    from edits_store import load_edits
+    manual = load_edits().get("edits", {})
     buckets = {}
     for c in gaz["ru"]:
         buckets.setdefault((round(c["lat"]), round(c["lon"])), []).append((c["lat"], c["lon"], True))

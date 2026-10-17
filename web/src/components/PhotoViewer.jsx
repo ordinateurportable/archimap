@@ -44,6 +44,20 @@ export default function PhotoViewer({ photos, start = 0, onClose }) {
       <button className="viewer__close" onClick={close}>
         Закрыть
       </button>
+      {/* поиск похожих картинок в Яндексе по этому снимку — подпись с местом
+          бывает не на первом фото (16.10). Превью, а не крупная версия: на
+          стенде крупных нет, Яндекс скачивает фото сам по адресу */}
+      <a
+        className="viewer__search"
+        href={`https://yandex.ru/images/search?rpt=imageview&url=${encodeURIComponent(
+          new URL(photo.fallback || photo.src, window.location.origin).href
+        )}`}
+        target="_blank"
+        rel="noreferrer"
+        onClick={(e) => e.stopPropagation()}
+      >
+        Найти это фото в Яндексе ↗
+      </a>
       {many && (
         <>
           <button

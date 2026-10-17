@@ -1668,8 +1668,14 @@ html.scroll-locked {
 /* пост внутри карточки модерации */
 .preview {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: flex-start;
+}
+
+/* миникарта «Сейчас на карте» — под фото и текстом, на всю ширину */
+.preview__map {
+  flex: 1 0 100%;
 }
 
 .preview__photo {
@@ -1681,7 +1687,10 @@ html.scroll-locked {
   background: #2c2c2e;
 }
 
+/* flex-basis 0: с переносом строк (.preview) длинный текст иначе уезжал бы
+   под фото */
 .preview__body {
+  flex: 1 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -2057,6 +2066,20 @@ button.thumbs__item {
 
 .viewer__nav--next {
   right: 12px;
+}
+
+.viewer__search {
+  position: absolute;
+  top: 18px;
+  left: 16px;
+  color: var(--tint-text);
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.preview__link {
+  color: var(--tint-text);
+  text-decoration: none;
 }
 
 .viewer__count {

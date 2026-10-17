@@ -742,6 +742,8 @@ export default function App() {
           )}
           hidden={hidden}
           onHidePost={(post) => hidePost(post, true)}
+          flagged={flagged}
+          onToggleFlagged={(post) => toggleFlagged(post).catch(fail)}
           onNotAd={(s) =>
             setNotAd(s.id, true)
               .then(() =>
@@ -793,7 +795,7 @@ export default function App() {
             setReviewedKey(key, value, text)
               .then(() =>
                 value
-                  ? say('Принято: у поста нет места — он во вкладке «Решено»', () =>
+                  ? say('Принято — пост во вкладке «Решено»', () =>
                       setReviewedKey(key, false).catch(fail)
                     )
                   : say('Пост вернулся в список отчёта')

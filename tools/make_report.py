@@ -61,7 +61,11 @@ def build(answers_span, pins_span):
         elif r.get("point"):
             city.append(item(k, label))
         else:
+            # что модель назвала, если назвала: «Модель назвала «Успенский
+            # собор…» — точку не нашли», а не «модель не назвала места»
+            named = ", ".join((a.get("candidates") or [])[:2]) or (a.get("locality") or "")
             no_place.append({"key": k, "title": title_of(posts.get(k, {})),
+                             **({"object": named} if named else {}),
                              "reason": (a.get("reason") or "").rstrip(". ")
                              or ("подборка без одного главного места" if a.get("digest") else "место не определено")})
 

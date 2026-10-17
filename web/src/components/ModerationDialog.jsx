@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { formatCoords, osmLink } from '../coords.js'
-import { humanDate, humanDateTime, loadJSON, mapPlaces, photoURL, placeLabel, plural, USER_SRC } from '../data.js'
+import { humanDate, humanDateTime, loadJSON, mapPlaces, photoURL, placeLabel, plural, postKey, USER_SRC } from '../data.js'
 import { manualPoints, visibleTags } from '../useEdits.js'
 import PointsEditor from './PointsEditor.jsx'
 import NoteForm from './NoteForm.jsx'
@@ -10,9 +10,13 @@ import PointMap from './PointMap.jsx'
 // Сам пост прямо в карточке модерации: решать, куда ставить точку, без
 // перехода в окно поста
 function PostPreview({ post, places, edits, onPhoto }) {
+  // «Сейчас на карте: Сент-Луис, Гатчина» — где именно, видно на миникарте
+  // по кнопке, не уходя из модерации (16.10, просьба пользователя)
+  const [mapOpen, setMapOpen] = useState(false)
   if (post === undefined) return <p className="review__meta">Загружаю пост…</p>
   if (!post) return null
   const { found } = visibleTags(post, places, edits)
+  const onMap = mapPlaces(found).filter((pl) => pl.lat != null && pl.lon != null)
   return (
     <div className="preview">
       {post.p[0] && (
@@ -30,15 +34,56 @@ function PostPreview({ post, places, edits, onPhoto }) {
       <div className="preview__body">
         <p className="preview__meta">{humanDate(post.d)}</p>
         <p className="preview__text">{post.t || 'Без подписи'}</p>
+        {/* Поиск похожих картинок в Яндексе по первому фото (16.10, ферма под
+            Воронежем: район был только в подписи на снимке). Яндекс сам
+            скачивает фото по адресу — работает на стенде; с localhost картинку
+            ему не достать, поэтому так и пишем */}
+        {post.p[0] && (
+          <p className="preview__meta">
+            <a
+              className="preview__link"
+              href={`https://yandex.ru/images/search?rpt=imageview&url=${encodeURIComponent(
+                new URL(photoURL(post, post.p[0]), window.location.origin).href
+              )}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Найти по фото в Яндексе ↗
+            </a>
+            {/^(localhost|127\.|\[::1\])/.test(window.location.hostname) &&
+              ' — работает только на стенде: с этого компьютера Яндекс фото не скачает'}
+          </p>
+        )}
         {found.length > 0 && (
           <p className="preview__meta">
             Сейчас на карте:{' '}
             {mapPlaces(found)
               .map((pl) => placeLabel(pl) + (pl.model ? ' (точка модели, ждёт решения)' : ''))
               .join(', ')}
+            {onMap.length > 0 && (
+              <>
+                {' · '}
+                <button className="coords-link" aria-pressed={mapOpen} onClick={() => setMapOpen((v) => !v)}>
+                  {mapOpen ? 'Скрыть карту' : 'Показать на карте'}
+                </button>
+              </>
+            )}
           </p>
         )}
       </div>
+      {/* ручная точка — зелёная, точка модели — оранжевая, место из разбора —
+          синее: видно, откуда что и насколько точки расходятся */}
+      {mapOpen && onMap.length > 0 && (
+        <div className="preview__map">
+          <PointMap
+            points={onMap.map((pl) => ({
+              lat: pl.lat,
+              lon: pl.lon,
+              color: pl.model ? '#ff9500' : pl.manual ? '#4cd964' : '#007aff',
+            }))}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -100,7 +145,10 @@ function Report({ report, edits, reviewed, hidden, renderPost }) {
   const manual = once(hasManual)
   const settled = once((x) => !hasManual(x) && isSettled(x))
   const lists = [
-    ['noPlace', 'Модель не назвала места', noPlace.map((x) => [x, 'noPlace'])],
+    // «Без точки», а не «Модель не назвала места»: сюда попадают и посты, где
+    // модель место назвала, а геокодер его не нашёл (Успенский собор в
+    // Свияжске, 16.10) — что именно, видно в карточке
+    ['noPlace', 'Без точки', noPlace.map((x) => [x, 'noPlace'])],
     ['missed', 'Искатель не нашёл объект', missed.map((x) => [x, 'missed'])],
     ['manual', 'Точка поставлена вручную', manual],
     ['settled', 'Решено', settled],
@@ -176,6 +224,18 @@ function Report({ report, edits, reviewed, hidden, renderPost }) {
   )
 }
 
+// пост, с которым пока непонятно, что делать («Кинотеатр «Орион»… «Ашхабад»»
+// — перечень без города): отметка та же, что в карточке на сайте, — вкладка
+// «Отмеченные»; из модерации пост не уходит
+function FlagButton({ post, flagged, onToggle }) {
+  const on = Boolean(flagged[postKey(post)])
+  return (
+    <button className={`row-action ${on ? 'row-action--on' : ''}`} aria-pressed={on} onClick={() => onToggle(post)}>
+      {on ? '★ Отмечен' : 'Отметить'}
+    </button>
+  )
+}
+
 export default function ModerationDialog({
   pending,
   published,
@@ -201,6 +261,8 @@ export default function ModerationDialog({
   away,
   reviewed = {},
   onReviewed,
+  flagged = {},
+  onToggleFlagged,
 }) {
   const [tab, setTab] = useState('pending')
   // отчёты о кругах разбора — статичный файл сборки, без сервера
@@ -289,21 +351,41 @@ export default function ModerationDialog({
   const reportPost = (item, kind) => {
     const isDone = Boolean(reviewed[item.key])
     const why = item.reason || item.note || ''
+    const named = kind === 'noPlace' && item.object
     const note = (why || item.object) && (
       <p className="review__report">
-        {kind === 'missed' ? 'Искатель не нашёл' : kind === 'noPlace' ? 'Модель не назвала места' : 'В отчёте'}
+        {kind === 'missed'
+          ? 'Искатель не нашёл'
+          : named
+            ? 'Модель назвала'
+            : kind === 'noPlace'
+              ? 'Модель не назвала места'
+              : 'В отчёте'}
         {item.object ? ` «${item.object}»` : ''}
+        {named ? ' — точку не нашли' : ''}
         {why ? `: ${why}` : ''}
       </p>
     )
+    // Подпись — по тому, что сейчас на карте: модель назвала Успенский собор,
+    // разбор его и поставил, а кнопка говорила «места нет» (16.10, жалоба).
+    // Точное место на карте — «точка верна»; объект назван, но не найден —
+    // «точнее не найти»; «места нет» — только когда его и правда нет
+    const shown = findPost(item.key)
+    const exactOnMap =
+      shown && mapPlaces(visibleTags(shown, places, edits).found).some((p) => p.parent || p.manual || p.model)
+    const acceptLabel = exactOnMap
+      ? 'Принять: точка верна'
+      : kind === 'missed' || item.object
+        ? 'Принять: точнее не найти'
+        : 'Принять: места нет'
     const accept = (
       <button
         key="accept"
         className={isDone ? 'row-action' : 'row-action row-action--primary'}
         onClick={() => onReviewed?.(item.key, !isDone, why)}
-        title="Согласиться с моделью: точнее места у поста нет — пост уйдёт во вкладку «Решено»"
+        title="Согласиться с тем, что сейчас на карте, — пост уйдёт во вкладку «Решено»"
       >
-        {isDone ? 'Вернуть в список' : kind === 'missed' ? 'Принять: точнее не найти' : 'Принять: места нет'}
+        {isDone ? 'Вернуть в список' : acceptLabel}
       </button>
     )
     const s = latestModel.get(item.key)
@@ -352,6 +434,7 @@ export default function ModerationDialog({
               Скрыть пост
             </button>
           )}
+          {post && onToggleFlagged && <FlagButton post={post} flagged={flagged} onToggle={onToggleFlagged} />}
         </div>
         {formOpen(id, 'point') && (
           <div className="suggest">
@@ -525,6 +608,9 @@ export default function ModerationDialog({
                       Скрыть пост
                     </button>
                   )}
+                  {s.key && findPost(s.key) && onToggleFlagged && (
+                    <FlagButton post={findPost(s.key)} flagged={flagged} onToggle={onToggleFlagged} />
+                  )}
                   {!String(s.id).startsWith('local') && (
                     <button
                       className="row-action row-action--danger"
@@ -622,7 +708,7 @@ export default function ModerationDialog({
           {tab === 'reports' && (
             <p className="sheet__note">
               {reports.length
-                ? 'Круги разбора постов моделями: что найдено и где точку найти не удалось — с причиной. «Принять» — согласиться, что точнее места нет: пост уйдёт во вкладку «Решено».'
+                ? 'Круги разбора постов моделями: что найдено и где точку найти не удалось — с причиной. «Принять» — согласиться с тем, что сейчас на карте (точка верна, точнее не найти или места нет): пост уйдёт во вкладку «Решено».'
                 : 'Отчётов пока нет.'}
             </p>
           )}
@@ -779,7 +865,8 @@ export default function ModerationDialog({
             <p className="sheet__note">
               «Применить точку» ставит посту точку из карточки вместо найденных мест. «Придумать правило»
               записывает случай, чтобы правила разбора научились решать его сами. «Скрыть пост» убирает его из
-              списка и с карты для всех посетителей.
+              списка и с карты для всех посетителей. «Отметить» — пост, с которым пока непонятно, что делать: он
+              остаётся здесь и попадает во вкладку «Отмеченные» на сайте.
             </p>
           )}
           {(tab === 'suggestions' || tab === 'model') &&

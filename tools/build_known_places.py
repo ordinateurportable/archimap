@@ -101,7 +101,9 @@ def sources():
             continue
         obj, city = lab.split(" · ", 1)
         out.append((obj, r.get("city") or city, pt["lat"], pt["lon"], k))
-    edits = json.load(open(os.path.join(DATA, "edits.json"), encoding="utf-8")).get("edits", {})
+    # ручные точки — и локальные, и поставленные на стенде (tools/edits_store.py)
+    from edits_store import load_edits
+    edits = load_edits().get("edits", {})
     for k, e in edits.items():
         loc = (e or {}).get("location") or {}
         name = loc.get("name") or ""

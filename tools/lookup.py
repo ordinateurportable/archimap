@@ -6,8 +6,13 @@
     python tools/lookup.py "Дом Губина" --at 52.61,39.60
     python tools/lookup.py --nearby --at 52.46,104.24 --radius 2   # что рядом: храмы, памятники, Викидата
 
-Ищет сразу в трёх местах и печатает кандидатов с расстоянием до центра:
+Ищет сразу в нескольких местах и печатает кандидатов с расстоянием до центра:
+  okn/osm — свои справочники (реестры наследия, выгрузка OSM);
+  wv  — списки наследия Викигида: с точкой или адресом (адрес — искать следом);
   wd  — Викидата: подпись, описание, координаты;
+  ph, nom — OpenStreetMap через Photon и Nominatim;
+  wiki — поиск по тексту русской Википедии: статьи с координатами и отрывки
+        (в статье об улице бывает номер дома нужного здания);
   osm — OpenStreetMap через Overpass: объекты с таким словом в названии
         в радиусе --radius км (по умолчанию 25);
   ga  — Geoapify (ключ tools/.geocoder-key; в вывод не попадает).
@@ -178,6 +183,61 @@ def geoapify(name, where, center):
     return out
 
 
+def photon(name, center):
+    """OpenStreetMap через Photon — тот же поиск, что в форме «Найти место» на
+    сайте: Overpass неделями молчит, а Photon по OSM отвечает (метеостанцию
+    Кара-Тюрек и дачу Петрова пользователь нашёл именно им, 16.10)."""
+    params = {"q": name, "limit": 8, "lang": "default"}
+    if center:
+        params.update(lat=center[0], lon=center[1])
+    out = []
+    for f in get("https://photon.komoot.io/api/?" + urllib.parse.urlencode(params)).get("features", []):
+        p = f["properties"]
+        lon, lat = f["geometry"]["coordinates"]
+        addr = " ".join(x for x in (p.get("street"), p.get("housenumber")) if x)
+        where = ", ".join(x for x in (p.get("city") or p.get("county"), p.get("state")) if x)
+        out.append(("ph", f"{p.get('name')} [{p.get('osm_value', '')}] {addr} · {where}", lat, lon))
+    return out
+
+
+def nominatim(name, where):
+    """OpenStreetMap через Nominatim — точное имя с городом или областью."""
+    q = urllib.parse.urlencode({"q": f"{name}, {where}" if where else name, "format": "jsonv2", "limit": 6,
+                                "accept-language": "ru"})
+    out = []
+    for r in get("https://nominatim.openstreetmap.org/search?" + q):
+        out.append(("nom", f"{r.get('name') or r.get('display_name', '')[:60]} [{r.get('type', '')}] · "
+                           f"{', '.join(r.get('display_name', '').split(', ')[1:4])}", float(r["lat"]), float(r["lon"])))
+    return out
+
+
+def ruwiki(name, where):
+    """Поиск по тексту русской Википедии. Встроенный веб-поиск агента —
+    зарубежный индекс, русские краеведческие сайты находит плохо (пасторат в
+    Астрахани: «адрес нигде не найден»), а Википедия знает здание внутри
+    статьи об улице: «Казанская улица (Астрахань)… дом 102А… Здание
+    Пастората». Печатает статьи с отрывком (там бывает адрес) и, если у
+    статьи есть координаты, — точку."""
+    q = urllib.parse.urlencode({"action": "query", "list": "search", "srsearch": f"{name} {where}".strip(),
+                                "srlimit": 5, "format": "json"})
+    hits = get("https://ru.wikipedia.org/w/api.php?" + q).get("query", {}).get("search", [])
+    if not hits:
+        return [], []
+    titles = "|".join(h["title"] for h in hits)
+    q = urllib.parse.urlencode({"action": "query", "prop": "coordinates", "titles": titles, "format": "json"})
+    pages = get("https://ru.wikipedia.org/w/api.php?" + q).get("query", {}).get("pages", {})
+    coords = {p["title"]: p["coordinates"][0] for p in pages.values() if p.get("coordinates")}
+    rows, notes = [], []
+    for h in hits:
+        snippet = re.sub(r"<[^>]+>", "", h.get("snippet", "")).replace("&quot;", "«").strip()
+        c = coords.get(h["title"])
+        if c:
+            rows.append(("wiki", f"{h['title']} — {snippet[:90]}", c["lat"], c["lon"]))
+        else:
+            notes.append(f"wiki «{h['title']}»: …{snippet[:160]}…")
+    return rows, notes
+
+
 def nearby(center, radius):
     """Что есть рядом с точкой, без названия: храмы и памятники из Geoapify
     (по категории) и всё, что Викидата знает вокруг. Так нашёлся «Спасский
@@ -241,17 +301,49 @@ def main():
             (h["src"], h["name"] + (f" [{h['kind']}]" if h.get("kind") else "")
              + (f" {h['addr']}" if h.get("addr") else ""), h["lat"], h["lon"])
             for h in local_places.search(a.name, center, a.radius)] if center else [])]
-        sources += [("wd — Викидата", lambda: wikidata(a.name, center)),
+        where = ", ".join(x for x in (a.near, a.region) if x)
+        sources += [("wv — Викигид (списки наследия)", lambda: wikivoyage_rows(a.name, a.near, center, a.radius)),
+                    ("wd — Викидата", lambda: wikidata(a.name, center)),
                     ("osm — Overpass", lambda: overpass(a.name, center, a.radius) if center else []),
-                    ("ga — Geoapify", lambda: geoapify(a.name, ", ".join(x for x in (a.near, a.region) if x), center))]
+                    ("ph — Photon (OSM)", lambda: photon(f"{a.name} {a.near or ''}".strip(), center)),
+                    ("nom — Nominatim (OSM)", lambda: nominatim(a.name, where)),
+                    ("ga — Geoapify", lambda: geoapify(a.name, where, center))]
+    notes = []
     for title, fn in sources:
         try:
-            rows += fn()
+            got = fn()
+            if isinstance(got, tuple):      # ruwiki/Викигид: точки и записи без точки
+                got, more = got
+                notes += more
+            rows += got
         except Exception as e:  # один источник упал — остальные показываем
             print(f"  {title}: не ответил — {str(e)[:120]}")
+    if a.name:
+        try:
+            got, more = ruwiki(a.name, a.near or a.region or "")
+            rows += got
+            notes += more
+        except Exception as e:
+            print(f"  wiki — Википедия (поиск по тексту): не ответила — {str(e)[:120]}")
     for src, label, lat, lon in rows:
         d = f"{g.distance_km(center, (lat, lon)):.1f} км" if center else ""
         print(f"{src:4} {lat:.6f}, {lon:.6f}  {d:>9}  {label}")
+    # без точки, но с адресом или отрывком текста: адрес — ищи следом
+    # `lookup.py "<улица, дом>" --near <город>`
+    for n in notes:
+        print("     ", n)
+
+
+def wikivoyage_rows(name, city, center, radius):
+    """Списки наследия Викигида (data/wikivoyage_heritage.json): с точкой —
+    строкой кандидата, без точки — адресом, который потом ищут геокодером."""
+    rows, notes = [], []
+    for h in local_places.search_wikivoyage(name, center, radius, city or ""):
+        if "lat" in h:
+            rows.append(("wv", f"{h['name']} · {h.get('address', '')}", h["lat"], h["lon"]))
+        else:
+            notes.append(f"wv  «{h['name']}» — адрес: {h.get('address') or '—'} ({h.get('municipality', '')})")
+    return rows, notes
 
 
 if __name__ == "__main__":
